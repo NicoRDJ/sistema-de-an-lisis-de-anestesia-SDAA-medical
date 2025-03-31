@@ -1,0 +1,475 @@
+# Descripción Técnica del Sistema
+# Sistema de Análisis para Anestesiólogos
+
+## Índice
+1. [Arquitectura del Sistema](#arquitectura-del-sistema)
+2. [Modelo de Inteligencia Artificial](#modelo-de-inteligencia-artificial)
+3. [Procesamiento de Datos](#procesamiento-de-datos)
+4. [Simulación Anatómica](#simulación-anatómica)
+5. [Interfaz Gráfica](#interfaz-gráfica)
+6. [Sistema de Alertas](#sistema-de-alertas)
+7. [Análisis Predictivo](#análisis-predictivo)
+8. [Consideraciones de Rendimiento](#consideraciones-de-rendimiento)
+9. [Expansiones Futuras](#expansiones-futuras)
+
+## Arquitectura del Sistema
+
+El Sistema de Análisis para Anestesiólogos está construido siguiendo una arquitectura modular que separa claramente la interfaz de usuario, la lógica de negocios y el procesamiento de datos:
+
+### Diagrama de Componentes
+
+```
++---------------------+     +---------------------+     +---------------------+
+|                     |     |                     |     |                     |
+|  Interfaz de        |     |  Motor de Análisis  |     |  Modelo CNN &       |
+|  Usuario (Tkinter)  |<--->|  y Procesamiento    |<--->|  Algoritmos         |
+|                     |     |                     |     |                     |
++---------------------+     +---------------------+     +---------------------+
+         ^                           ^                            ^
+         |                           |                            |
+         v                           v                            v
++---------------------+     +---------------------+     +---------------------+
+|                     |     |                     |     |                     |
+|  Visualización      |     |  Generación de      |     |  Simulación         |
+|  (Matplotlib/SVG)   |     |  Recomendaciones    |     |  de Datos           |
+|                     |     |                     |     |                     |
++---------------------+     +---------------------+     +---------------------+
+```
+
+### Componentes Principales
+
+1. **Clase Principal `AplicacionAnestesiaAnalytics`**:
+   - Inicializa todos los componentes del sistema
+   - Gestiona el flujo de la aplicación
+   - Coordina la interacción entre módulos
+
+2. **Modelo CNN `ModeloCNNAnestesia`**:
+   - Implementa la red neuronal para análisis de datos
+   - Proporciona predicciones de estado del paciente
+   - Funciona con datos en tiempo real
+
+3. **Procesador de Datos**:
+   - Normaliza y preprocesa datos vitales
+   - Evalúa parámetros contra rangos normales
+   - Detecta tendencias y patrones
+
+4. **Simulador Cardíaco**:
+   - Genera visualización anatómica dinámica
+   - Responde a parámetros vitales en tiempo real
+   - Sincroniza animaciones con datos fisiológicos
+
+5. **Sistema de Recomendaciones**:
+   - Genera sugerencias basadas en el estado actual
+   - Prioriza acciones según urgencia
+   - Combina reglas determinísticas y análisis IA
+
+## Modelo de Inteligencia Artificial
+
+El núcleo analítico del sistema es una red neuronal diseñada específicamente para procesar datos vitales de pacientes anestesiados:
+
+### Arquitectura CNN
+
+```python
+class ModeloCNNAnestesia(nn.Module):
+    def __init__(self, input_features=11, output_classes=3):
+        super(ModeloCNNAnestesia, self).__init__()
+        
+        # Capa de entrada - procesa las características vitales
+        self.fc1 = nn.Linear(input_features, 128)
+        self.dropout1 = nn.Dropout(0.3)
+        
+        # Capa oculta - detecta patrones complejos
+        self.fc2 = nn.Linear(128, 64)
+        self.dropout2 = nn.Dropout(0.3)
+        
+        # Capa de salida - clasifica en estados (Normal, Advertencia, Peligro)
+        self.fc3 = nn.Linear(64, output_classes)
+        
+    def forward(self, x):
+        # Propagación hacia adelante
+        x = F.relu(self.fc1(x))
+        x = self.dropout1(x)
+        
+        x = F.relu(self.fc2(x))
+        x = self.dropout2(x)
+        
+        x = self.fc3(x)
+        
+        return x
+```
+
+### Características del Modelo
+
+- **Entradas**: 11 parámetros vitales normalizados
+- **Salidas**: 3 clases (Normal, Advertencia, Peligro)
+- **Activación**: ReLU en capas intermedias
+- **Regularización**: Dropout para prevenir sobreajuste
+- **Arquitectura**: Red feed-forward simplificada para procesamiento en tiempo real
+
+### Preprocesamiento de Datos
+
+```python
+def preprocesar_datos(df, ventana_tiempo=10):
+    # Extraer solo los parámetros vitales numéricos
+    X = df[PARAMETROS_VITALES].values
+    
+    # Normalizar los datos en base a rangos fisiológicos
+    for i, parametro in enumerate(PARAMETROS_VITALES):
+        min_val, max_val = RANGOS_NORMALES[parametro]
+        rango = max_val - min_val
+        X[:, i] = (X[:, i] - min_val) / rango
+    
+    # Convertir a tensor de PyTorch
+    X_tensor = torch.FloatTensor(X[-1]).unsqueeze(0)
+    
+    return X_tensor
+```
+
+## Procesamiento de Datos
+
+El sistema procesa datos vitales en tiempo real utilizando algoritmos especializados:
+
+### Evaluación de Estado
+
+```python
+def evaluar_estado_paciente(datos_vitales):
+    num_fuera_rango = 0
+    num_peligro = 0
+    detalles = []
+    
+    for parametro in PARAMETROS_VITALES:
+        if parametro in datos_vitales:
+            valor = datos_vitales[parametro]
+            min_val, max_val = RANGOS_NORMALES[parametro]
+            
+            # Determinar si está fuera de rango
+            if valor < min_val or valor > max_val:
+                num_fuera_rango += 1
+                
+                # Determinar si está en rango de peligro (10% fuera del límite)
+                margen_peligro = (max_val - min_val) * 0.1
+                if valor < min_val - margen_peligro or valor > max_val + margen_peligro:
+                    num_peligro += 1
+                    detalles.append(f"{parametro}: {valor} (PELIGRO)")
+                else:
+                    detalles.append(f"{parametro}: {valor} (ADVERTENCIA)")
+            else:
+                detalles.append(f"{parametro}: {valor}")
+    
+    # Determinar estado general
+    if num_peligro > 0:
+        return "Peligro", detalles
+    elif num_fuera_rango > 0:
+        return "Advertencia", detalles
+    else:
+        return "Normal", detalles
+```
+
+### Flujo de Datos
+
+1. **Adquisición**: Lectura de datos simulados o reales
+2. **Validación**: Comprobación de rangos y coherencia
+3. **Normalización**: Escala basada en rangos fisiológicos
+4. **Análisis**: Procesamiento por CNN y algoritmos determinísticos
+5. **Interpretación**: Clasificación de estado y generación de alertas
+6. **Visualización**: Actualización de interfaz gráfica
+7. **Almacenamiento**: Registro en historial de datos
+
+## Simulación Anatómica
+
+La simulación anatómica del corazón implementa visualizaciones SVG dinámicas que responden a los datos del paciente:
+
+### Implementación Técnica
+
+```python
+def actualizar_simulacion_corazon(self):
+    # Obtener parámetros vitales actuales
+    fc = ultimo_registro["Frecuencia Cardíaca"]
+    pas = ultimo_registro["Presión Arterial Sistólica"]
+    pad = ultimo_registro["Presión Arterial Diastólica"]
+    
+    # Seleccionar SVG según estado del paciente
+    if estado == "Normal":
+        svg_base = self.svg_corazon_normal
+    elif estado == "Advertencia":
+        svg_base = self.svg_corazon_advertencia
+    else:  # Peligro
+        svg_base = self.svg_corazon_peligro
+    
+    # Calcular fase del ciclo cardíaco
+    duracion_latido = 60 / fc  # duración en segundos
+    timestamp = time.time() % duracion_latido
+    fase = timestamp / duracion_latido
+    
+    # Aplicar efecto de contracción (sístole y diástole)
+    escala = 1.0
+    if fase < 0.2:  # Sístole rápida
+        escala = 1.0 - (fase / 0.2) * 0.1
+    elif fase < 0.4:  # Diástole gradual
+        escala = 0.9 + ((fase - 0.2) / 0.2) * 0.1
+    
+    # Modificar SVG y renderizar
+    svg_actual = svg_base.replace('width="400" height="400"', 
+                                 f'width="{nuevo_ancho}" height="{nuevo_alto}"')
+    self.mostrar_svg_en_canvas(svg_actual, margen_x, margen_y)
+```
+
+### Sincronización Fisiológica
+
+- **Frecuencia cardíaca**: Controla la velocidad de contracción del corazón
+- **Presión arterial**: Influye en la intensidad visual de las arterias
+- **Estado del paciente**: Determina el esquema de colores general
+- **Arritmias**: Se reflejan en patrones irregulares de contracción
+
+### Visualización de ECG
+
+```python
+def actualizar_ecg(self, frecuencia_cardiaca, estado):
+    # Calcular fase actual del ciclo cardíaco
+    ciclo_length = int(100 / (frecuencia_cardiaca / 60))
+    t = len(self.datos_ecg) % ciclo_length
+    
+    # Generar forma de onda del ECG según fase
+    if t == 0:  # Onda P
+        nuevo_punto = 0.3
+    elif t == int(ciclo_length * 0.15):  # Complejo QRS - Q
+        nuevo_punto = -0.3
+    elif t == int(ciclo_length * 0.2):  # Complejo QRS - R
+        nuevo_punto = 1.0
+    elif t == int(ciclo_length * 0.25):  # Complejo QRS - S
+        nuevo_punto = -0.5
+    elif t == int(ciclo_length * 0.4):  # Onda T
+        nuevo_punto = 0.4
+    else:
+        nuevo_punto = 0
+            
+    # Añadir variaciones según estado
+    if estado == "Peligro":
+        # Simular arritmias o alteraciones
+        if np.random.random() < 0.1:
+            nuevo_punto = 0.7 * np.random.random()
+    
+    self.datos_ecg.append(nuevo_punto)
+    self.linea_ecg.set_data(range(len(self.datos_ecg)), self.datos_ecg)
+    self.canvas_ecg.draw()
+```
+
+## Interfaz Gráfica
+
+La interfaz está desarrollada con Tkinter, optimizada para visualización clínica:
+
+### Organización de Ventanas y Frames
+
+```python
+def crear_interfaz(self):
+    # Frame principal con grid 2x2
+    self.frame_principal = ttk.Frame(self)
+    self.frame_principal.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    
+    # 1. Panel de Información del Paciente (arriba-izquierda)
+    self.frame_info_paciente = ttk.LabelFrame(self.frame_principal, text="Información del Paciente")
+    self.frame_info_paciente.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+    
+    # 2. Panel de Monitores (arriba-derecha)
+    self.frame_monitores = ttk.LabelFrame(self.frame_principal, text="Monitores en Tiempo Real")
+    self.frame_monitores.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
+    
+    # 3. Panel de Parámetros Vitales (abajo-izquierda)
+    self.frame_vitales = ttk.LabelFrame(self.frame_principal, text="Parámetros Vitales")
+    self.frame_vitales.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
+    
+    # 4. Panel de Análisis y Recomendaciones (abajo-derecha)
+    self.frame_analisis = ttk.LabelFrame(self.frame_principal, text="Análisis y Recomendaciones")
+    self.frame_analisis.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
+```
+
+### Diseño Responsivo
+
+- Utiliza sistema de grid con pesos para adaptarse a diferentes resoluciones
+- Implementa ScrolledText para mostrar grandes volúmenes de información
+- Utiliza Canvas para representaciones anatómicas escalables
+
+### Actualizaciones en Tiempo Real
+
+```python
+def actualizar_interfaz_con_datos(self, datos):
+    # Actualizar tabla de parámetros vitales
+    self.tabla_vitales.delete(*self.tabla_vitales.get_children())
+    
+    for parametro in PARAMETROS_VITALES:
+        if parametro in datos:
+            valor = datos[parametro]
+            min_val, max_val = RANGOS_NORMALES[parametro]
+            
+            # Determinar estado y aplicar formato
+            # ...
+    
+    # Actualizar gráficos
+    self.actualizar_graficos()
+    
+    # Actualizar simulación del corazón
+    if hasattr(self, 'corazon_activo') and self.corazon_activo:
+        # ...
+    
+    # Analizar datos con CNN
+    if len(self.historial_datos) > 5:
+        self.analizar_datos()
+```
+
+## Sistema de Alertas
+
+El sistema implementa múltiples niveles de alertas visuales y textuales:
+
+### Clasificación de Alertas
+
+1. **Alertas de Nivel 1 (Informativas)**:
+   - Parámetros cerca de límites normales
+   - Cambios leves en tendencias
+   - Actualizaciones de estado
+
+2. **Alertas de Nivel 2 (Advertencia)**:
+   - Parámetros fuera de rangos normales
+   - Tendencias preocupantes
+   - Predicciones de posible deterioro
+
+3. **Alertas de Nivel 3 (Críticas)**:
+   - Parámetros en rangos peligrosos
+   - Múltiples valores anormales
+   - Predicciones de complicaciones inminentes
+
+### Implementación Visual
+
+```python
+# Configuración de colores según niveles de alerta
+COLORES_ESTADO = {
+    "Normal": "#4CAF50",  # Verde
+    "Advertencia": "#FFC107",  # Amarillo
+    "Peligro": "#F44336",  # Rojo
+}
+
+# Aplicación a elementos de interfaz
+self.tabla_vitales.tag_configure("normal", background="#E8F5E9")
+self.tabla_vitales.tag_configure("advertencia", background="#FFF9C4")
+self.tabla_vitales.tag_configure("peligro", background="#FFEBEE")
+```
+
+## Análisis Predictivo
+
+El sistema combina análisis determinístico con inteligencia artificial para predicción:
+
+### Enfoque Híbrido
+
+1. **Análisis por Reglas**:
+   - Evalúa valores actuales contra rangos predefinidos
+   - Proporciona evaluación inmediata y transparente
+   - Sirve como fallback si la IA falla
+
+2. **Análisis por CNN**:
+   - Detecta patrones sutiles no evidentes en reglas simples
+   - Anticipa tendencias basadas en aprendizaje previo
+   - Mejora con el tiempo y más datos de entrenamiento
+
+3. **Fusión de Resultados**:
+   - Compara resultados de ambos enfoques
+   - Usa el más conservador para garantizar seguridad
+   - Muestra ambas evaluaciones al usuario
+
+### Ejemplo de Fusión de Resultados
+
+```python
+def actualizar_analisis(self, estado_predicho, estado_reglas, detalles):
+    self.txt_analisis.insert(tk.END, f"Estado según CNN: ", "subtitulo")
+    self.txt_analisis.insert(tk.END, f"{estado_predicho}\n", f"estado_{estado_predicho.lower()}")
+    
+    self.txt_analisis.insert(tk.END, f"Estado según reglas: ", "subtitulo")
+    self.txt_analisis.insert(tk.END, f"{estado_reglas}\n\n", f"estado_{estado_reglas.lower()}")
+    
+    # Determinar estado final (el más grave de ambos)
+    estados_orden = {"Normal": 0, "Advertencia": 1, "Peligro": 2}
+    estado_final = estado_predicho
+    if estados_orden[estado_reglas] > estados_orden[estado_predicho]:
+        estado_final = estado_reglas
+    
+    # Generar recomendaciones basadas en estado final
+    # ...
+```
+
+## Consideraciones de Rendimiento
+
+El sistema está optimizado para funcionar en equipos estándar:
+
+### Optimizaciones Implementadas
+
+1. **Gestión de Memoria**:
+   - Limita el historial a 100 registros recientes
+   - Utiliza estructuras de datos eficientes
+   - Implementa actualización selectiva de componentes UI
+
+2. **Rendimiento Computacional**:
+   - Modelo CNN ligero para inferencias rápidas
+   - Usa PyTorch con optimizaciones para CPU
+   - Procesamiento paralelo para tareas intensivas
+
+3. **Eficiencia de Actualización**:
+   - Frecuencia de actualización adaptativa según FC
+   - Actualización parcial de interfaz cuando es posible
+   - Muestreo inteligente para visualizaciones de tendencias
+
+### Requisitos de Hardware
+
+- CPU: Procesador dual-core 2GHz+ (quad-core recomendado)
+- RAM: 8GB mínimo (16GB recomendado)
+- Almacenamiento: 2GB para aplicación y datos
+- Gráficos: Tarjeta básica compatible con OpenGL 2.0+
+
+## Expansiones Futuras
+
+El sistema está diseñado para ampliarse en varias direcciones:
+
+### Mejoras Planificadas
+
+1. **Inteligencia Artificial Avanzada**:
+   - Implementación de aprendizaje por refuerzo
+   - Modelos específicos para distintos procedimientos quirúrgicos
+   - Análisis multimodal (combinando múltiples fuentes de datos)
+
+2. **Expansión de Visualizaciones Anatómicas**:
+   - Simulación pulmonar con mecánica respiratoria
+   - Visualización cerebral con indicadores de profundidad anestésica
+   - Modelo corporal completo con distribución de fármacos
+
+3. **Integración con Sistemas Hospitalarios**:
+   - Soporte para estándares HL7/FHIR
+   - Interoperabilidad con sistemas de historias clínicas
+   - Envío automático de datos a registros de anestesia
+
+4. **Expansión a Dispositivos Móviles**:
+   - Aplicación complementaria para monitoreo remoto
+   - Notificaciones en tiempo real para el equipo quirúrgico
+   - Sincronización entre múltiples dispositivos
+
+### Arquitectura para Expansión
+
+```
++-------------------------+
+|                         |
+|  Sistema Principal      |
+|  (Núcleo Actual)        |
+|                         |
++-------------------------+
+          / | \
+         /  |  \
+        /   |   \
++-------+ +-------+ +-------+
+|       | |       | |       |
+| API   | | Plug- | | Mod.  |
+| Ext.  | | ins   | | ML    |
+|       | |       | |       |
++-------+ +-------+ +-------+
+```
+
+El diseño modular facilita la adición de nuevas capacidades sin modificar el núcleo del sistema, garantizando estabilidad y retrocompatibilidad.
+
+---
+
+©️ 2025 Sistema de Análisis para Anestesiólogos
