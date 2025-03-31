@@ -181,9 +181,9 @@ Este proyecto está licenciado bajo la Licencia MIT - vea el archivo [LICENSE](L
 
 ## Autor
 
-Desarrollado por [Tu Nombre]
+Desarrollado por [Nicolas Rodriguez Diaz]
 
-Para contacto o soporte: [tuemail@ejemplo.com]
+Para contacto o soporte: [nrodrigued@eafit.edu.co]
 
 ---
 
